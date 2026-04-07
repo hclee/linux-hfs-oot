@@ -287,6 +287,13 @@ static int hfsplus_setattr(struct mnt_idmap *idmap,
 	if ((attr->ia_valid & ATTR_SIZE) &&
 	    attr->ia_size != i_size_read(inode)) {
 		inode_dio_wait(inode);
+		if (attr->ia_size < inode->i_size) {
+			error = block_truncate_page(inode->i_mapping,
+						    attr->ia_size,
+						    hfsplus_get_block);
+			if (error)
+				return error;
+		}
 		if (attr->ia_size > inode->i_size) {
 			error = generic_cont_expand_simple(inode,
 							   attr->ia_size);
