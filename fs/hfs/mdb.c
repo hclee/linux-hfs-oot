@@ -238,8 +238,11 @@ int hfs_mdb_get(struct super_block *sb)
 
 	attrib = mdb->drAtrb;
 	if (!(attrib & cpu_to_be16(HFS_SB_ATTRIB_UNMNT))) {
-		pr_warn("filesystem was not cleanly unmounted, running fsck.hfs is recommended.	Mounting read-only.\n");
-		sb->s_flags |= SB_RDONLY;
+		pr_warn("filesystem was not cleanly unmounted, running fsck.hfs is recommended.\n");
+		if (!test_bit(HFS_FLG_FORCE, &HFS_SB(sb)->flags)) {
+			sb->s_flags |= SB_RDONLY;
+			pr_warn("mounting read-only.\n");
+		}
 	}
 	if ((attrib & cpu_to_be16(HFS_SB_ATTRIB_SLOCK))) {
 		pr_warn("filesystem is marked locked, mounting read-only.\n");

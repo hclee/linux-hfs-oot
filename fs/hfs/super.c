@@ -126,9 +126,12 @@ static int hfs_reconfigure(struct fs_context *fc)
 
 	if (!(fc->sb_flags & SB_RDONLY)) {
 		if (!(HFS_SB(sb)->mdb->drAtrb & cpu_to_be16(HFS_SB_ATTRIB_UNMNT))) {
-			pr_warn("filesystem was not cleanly unmounted, running fsck.hfs is recommended.  leaving read-only.\n");
-			sb->s_flags |= SB_RDONLY;
-			fc->sb_flags |= SB_RDONLY;
+			pr_warn("filesystem was not cleanly unmounted, running fsck.hfs is recommended.\n");
+			if (!test_bit(HFS_FLG_FORCE, &HFS_SB(sb)->flags)) {
+				pr_warn("leaving read-only.\n");
+				sb->s_flags |= SB_RDONLY;
+				fc->sb_flags |= SB_RDONLY;
+			}
 		} else if (HFS_SB(sb)->mdb->drAtrb & cpu_to_be16(HFS_SB_ATTRIB_SLOCK)) {
 			pr_warn("filesystem is marked locked, leaving read-only.\n");
 			sb->s_flags |= SB_RDONLY;
@@ -163,6 +166,8 @@ static int hfs_show_options(struct seq_file *seq, struct dentry *root)
 		seq_printf(seq, ",iocharset=%s", sbi->nls_io->charset);
 	if (sbi->s_quiet)
 		seq_printf(seq, ",quiet");
+	if (test_bit(HFS_FLG_FORCE, &sbi->flags))
+		seq_puts(seq, ",force");
 	return 0;
 }
 
@@ -193,7 +198,7 @@ static const struct super_operations hfs_super_operations = {
 enum {
 	opt_uid, opt_gid, opt_umask, opt_file_umask, opt_dir_umask,
 	opt_part, opt_session, opt_type, opt_creator, opt_quiet,
-	opt_codepage, opt_iocharset,
+	opt_codepage, opt_iocharset, opt_force,
 };
 
 static const struct fs_parameter_spec hfs_param_spec[] = {
@@ -209,6 +214,7 @@ static const struct fs_parameter_spec hfs_param_spec[] = {
 	fsparam_flag	("quiet",	opt_quiet),
 	fsparam_string	("codepage",	opt_codepage),
 	fsparam_string	("iocharset",	opt_iocharset),
+	fsparam_flag	("force",	opt_force),
 	{}
 };
 
@@ -270,6 +276,9 @@ static int hfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		break;
 	case opt_quiet:
 		hsb->s_quiet = 1;
+		break;
+	case opt_force:
+		set_bit(HFS_FLG_FORCE, &hsb->flags);
 		break;
 	case opt_codepage:
 		if (hsb->nls_disk) {
