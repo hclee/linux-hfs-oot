@@ -224,29 +224,13 @@ void hfs_set_next_unused_CNID(struct super_block *sb,
 	}
 }
 
-/*
- * hfs_correct_next_unused_CNID()
- *
- * Correct the next unused CNID of Catalog Tree.
- */
-static
-int hfs_correct_next_unused_CNID(struct super_block *sb, u32 cnid)
+static int hfs_find_highest_thread_cnid(struct hfs_btree *cat_tree, u32 *cnid)
 {
-	struct hfs_btree *cat_tree;
 	struct hfs_bnode *node;
 	s64 leaf_head;
 	s64 leaf_tail;
 	s64 node_id;
 
-	hfs_dbg("cnid %u, next_id %lld\n",
-		cnid, atomic64_read(&HFS_SB(sb)->next_id));
-
-	if ((cnid + 1) < atomic64_read(&HFS_SB(sb)->next_id)) {
-		/* next ID should be unchanged */
-		return 0;
-	}
-
-	cat_tree = HFS_SB(sb)->cat_tree;
 	leaf_head = cat_tree->leaf_head;
 	leaf_tail = cat_tree->leaf_tail;
 
@@ -258,9 +242,8 @@ int hfs_correct_next_unused_CNID(struct super_block *sb, u32 cnid)
 
 	node = hfs_bnode_find(cat_tree, leaf_tail);
 	if (IS_ERR(node)) {
-		pr_err("fail to find leaf node: node ID %lld\n",
-			leaf_tail);
-		return -ENOENT;
+		pr_err("fail to find leaf node: node ID %lld\n", leaf_tail);
+		return PTR_ERR(node);
 	}
 
 	node_id = leaf_tail;
@@ -271,63 +254,87 @@ int hfs_correct_next_unused_CNID(struct super_block *sb, u32 cnid)
 		if (node_id != leaf_tail) {
 			node = hfs_bnode_find(cat_tree, node_id);
 			if (IS_ERR(node))
-				return -ENOENT;
+				return PTR_ERR(node);
 		}
 
 		hfs_dbg("node %lld, leaf_tail %lld, leaf_head %lld\n",
 			node_id, leaf_tail, leaf_head);
 
-		hfs_bnode_dump(node);
-
 		for (i = node->num_recs - 1; i >= 0; i--) {
-			hfs_cat_rec rec;
-			u16 off, len, keylen;
-			int entryoffset;
-			int entrylength;
-			u32 found_cnid;
+			hfs_btree_key key;
+			u16 off;
+			u16 keylen;
+			u8 type;
 
-			len = hfs_brec_lenoff(node, i, &off);
 			keylen = hfs_brec_keylen(node, i);
 			if (keylen == 0) {
-				pr_err("fail to get the keylen: "
-					"node_id %lld, record index %d\n",
+				pr_err("fail to get the keylen: node_id %lld, record index %d\n",
 					node_id, i);
+				hfs_bnode_put(node);
 				return -EINVAL;
 			}
 
-			entryoffset = off + keylen;
-			entrylength = len - keylen;
-
-			if (entrylength > sizeof(rec)) {
-				pr_err("unexpected record length: "
-					"entrylength %d\n",
-					entrylength);
-				return -EINVAL;
+			hfs_brec_lenoff(node, i, &off);
+			hfs_bnode_read_key(node, &key, off);
+			if (key.key_len < sizeof(struct hfs_cat_key) -
+					  sizeof(key.cat.CName.name) -
+					  sizeof(key.key_len) ||
+			    key.key_len + sizeof(key.key_len) > keylen) {
+				pr_err("invalid catalog key: node_id %lld, record index %d, key_len %u\n",
+				       node_id, i, key.key_len);
+				hfs_bnode_put(node);
+				return -EIO;
 			}
 
-			hfs_bnode_read(node, &rec, entryoffset, entrylength);
+			type = hfs_bnode_read_u8(node, off + keylen);
 
-			if (rec.type == HFS_CDR_DIR) {
-				found_cnid = be32_to_cpu(rec.dir.DirID);
-				hfs_dbg("found_cnid %u\n", found_cnid);
-				hfs_set_next_unused_CNID(sb, cnid, found_cnid);
-				hfs_bnode_put(node);
-				return 0;
-			} else if (rec.type == HFS_CDR_FIL) {
-				found_cnid = be32_to_cpu(rec.file.FlNum);
-				hfs_dbg("found_cnid %u\n", found_cnid);
-				hfs_set_next_unused_CNID(sb, cnid, found_cnid);
-				hfs_bnode_put(node);
-				return 0;
-			}
+			if (type != HFS_CDR_THD && type != HFS_CDR_FTH)
+				continue;
+
+			*cnid = be32_to_cpu(key.cat.ParID);
+			hfs_bnode_put(node);
+			return 0;
 		}
 
 		node_id = node->prev;
 		hfs_bnode_put(node);
-
 	} while (node_id >= leaf_head);
 
-	return -ENOENT;
+	*cnid = HFS_FIRSTUSER_CNID - 1;
+	return 0;
+}
+
+/*
+ * hfs_correct_next_unused_CNID()
+ *
+ * Correct the next unused CNID of Catalog Tree.
+ */
+static
+int hfs_correct_next_unused_CNID(struct super_block *sb, u32 cnid)
+{
+	struct hfs_btree *cat_tree;
+	u32 found_cnid;
+	s64 next_id;
+	int err;
+
+	next_id = atomic64_read(&HFS_SB(sb)->next_id);
+	hfs_dbg("cnid %u, next_id %lld\n",
+		cnid, next_id);
+
+	if ((s64)cnid + 1 < next_id) {
+		/* next ID should be unchanged */
+		return 0;
+	}
+
+	cat_tree = HFS_SB(sb)->cat_tree;
+	err = hfs_find_highest_thread_cnid(cat_tree, &found_cnid);
+	if (err)
+		return err;
+
+	hfs_dbg("highest thread cnid %u\n", found_cnid);
+	hfs_set_next_unused_CNID(sb, cnid, found_cnid);
+
+	return 0;
 }
 
 /*
