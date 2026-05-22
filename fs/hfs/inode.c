@@ -130,6 +130,16 @@ static ssize_t hfs_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	size_t count = iov_iter_count(iter);
 	ssize_t ret;
 
+	/*
+	 * Do not allow direct I/O for extending writes because hfs_get_block()
+	 * doesn't allocate blocks for holes, and blockdev_direct_IO() doesn't
+	 * fill holes. Return 0, and fallback to normal buffered write.
+	 */
+	if (iov_iter_rw(iter) == WRITE) {
+		if (iocb->ki_pos + count > i_size_read(inode))
+			return 0;
+	}
+
 	ret = blockdev_direct_IO(iocb, inode, iter, hfs_get_block);
 
 	/*
