@@ -702,8 +702,20 @@ int hfs_metadata_fsync(struct super_block *sb)
 	filemap_write_and_wait(ext_tree->inode->i_mapping);
 	filemap_write_and_wait(cat_tree->inode->i_mapping);
 
-	/* 3. Flush MDB and sync block device */
-	flush_delayed_work(&HFS_SB(sb)->mdb_work);
+	/*
+	 * If the delayed MDB write hasn't started yet, drop it and let this fsync
+	 * path perform the commit synchronously. Do not wait for a running worker
+	 * here because direct I/O completion may call fsync() from a WQ_MEM_RECLAIM
+	 * workqueue.
+	 */
+	hfs_clear_pending_mdb_work(sb);
+
+	/*
+	 * Do not flush mdb_work here. direct I/O completion may call fsync() from
+	 * a WQ_MEM_RECLAIM workqueue, and flushing system_long_wq would violate
+	 * the workqueue forward-progress rules. Sync the MDB directly instead.
+	 */
+	hfs_sync_fs(sb, 1);
 	/* .. finally sync the buffers to disk */
 	err = sync_blockdev(sb->s_bdev);
 	return err;
