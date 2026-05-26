@@ -32,8 +32,11 @@ static struct kmem_cache *hfs_inode_cachep;
 MODULE_DESCRIPTION("Apple Macintosh file system support");
 MODULE_LICENSE("GPL");
 
-static int hfs_sync_fs(struct super_block *sb, int wait)
+int hfs_sync_fs(struct super_block *sb, int wait)
 {
+	if (!wait)
+		return 0;
+
 	is_hfs_cnid_counts_valid(sb);
 	hfs_mdb_commit(sb);
 	return 0;
@@ -86,6 +89,22 @@ void hfs_mark_mdb_dirty(struct super_block *sb)
 		sbi->work_queued = 1;
 	}
 	spin_unlock(&sbi->work_lock);
+}
+
+bool hfs_clear_pending_mdb_work(struct super_block *sb)
+{
+	struct hfs_sb_info *sbi = HFS_SB(sb);
+	bool cancelled;
+
+	cancelled = cancel_delayed_work(&sbi->mdb_work);
+	if (!cancelled)
+		return false;
+
+	spin_lock(&sbi->work_lock);
+	sbi->work_queued = 0;
+	spin_unlock(&sbi->work_lock);
+
+	return true;
 }
 
 /*
