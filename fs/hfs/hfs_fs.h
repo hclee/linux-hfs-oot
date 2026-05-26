@@ -230,6 +230,8 @@ extern int hfs_mac2asc(struct super_block *sb,
 			char *out, const struct hfs_name *in);
 
 /* super.c */
+extern int hfs_sync_fs(struct super_block *sb, int wait);
+extern bool hfs_clear_pending_mdb_work(struct super_block *sb);
 extern void hfs_mark_mdb_dirty(struct super_block *sb);
 
 /*
