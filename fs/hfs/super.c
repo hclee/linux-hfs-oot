@@ -34,8 +34,24 @@ MODULE_LICENSE("GPL");
 
 int hfs_sync_fs(struct super_block *sb, int wait)
 {
+	struct hfs_btree *ext_tree = HFS_SB(sb)->ext_tree;
+	struct hfs_btree *cat_tree = HFS_SB(sb)->cat_tree;
+
 	if (!wait)
 		return 0;
+
+	/* 1. Update B-tree headers in memory & mark dirty */
+	mutex_lock(&ext_tree->tree_lock);
+	hfs_btree_write(ext_tree);
+	mutex_unlock(&ext_tree->tree_lock);
+
+	mutex_lock(&cat_tree->tree_lock);
+	hfs_btree_write(cat_tree);
+	mutex_unlock(&cat_tree->tree_lock);
+
+	/* 2. Sync all B-tree nodes (including the updated headers) to disk */
+	filemap_write_and_wait(ext_tree->inode->i_mapping);
+	filemap_write_and_wait(cat_tree->inode->i_mapping);
 
 	is_hfs_cnid_counts_valid(sb);
 	hfs_mdb_commit(sb);
@@ -52,6 +68,8 @@ int hfs_sync_fs(struct super_block *sb, int wait)
 static void hfs_put_super(struct super_block *sb)
 {
 	cancel_delayed_work_sync(&HFS_SB(sb)->mdb_work);
+	if (!sb_rdonly(sb))
+		hfs_sync_fs(sb, 1);
 	hfs_mdb_close(sb);
 	/* release the MDB's resources */
 	hfs_mdb_put(sb);
