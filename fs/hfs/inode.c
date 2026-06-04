@@ -685,23 +685,6 @@ int hfs_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 
 int hfs_metadata_fsync(struct super_block *sb)
 {
-	struct hfs_btree *ext_tree = HFS_SB(sb)->ext_tree;
-	struct hfs_btree *cat_tree = HFS_SB(sb)->cat_tree;
-	int err;
-
-	/* 1. Update B-tree headers in memory & mark dirty */
-	mutex_lock(&ext_tree->tree_lock);
-	hfs_btree_write(ext_tree);
-	mutex_unlock(&ext_tree->tree_lock);
-
-	mutex_lock(&cat_tree->tree_lock);
-	hfs_btree_write(cat_tree);
-	mutex_unlock(&cat_tree->tree_lock);
-
-	/* 2. Sync all B-tree nodes (including the updated headers) to disk */
-	filemap_write_and_wait(ext_tree->inode->i_mapping);
-	filemap_write_and_wait(cat_tree->inode->i_mapping);
-
 	/*
 	 * If the delayed MDB write hasn't started yet, drop it and let this fsync
 	 * path perform the commit synchronously. Do not wait for a running worker
@@ -716,9 +699,7 @@ int hfs_metadata_fsync(struct super_block *sb)
 	 * the workqueue forward-progress rules. Sync the MDB directly instead.
 	 */
 	hfs_sync_fs(sb, 1);
-	/* .. finally sync the buffers to disk */
-	err = sync_blockdev(sb->s_bdev);
-	return err;
+	return sync_blockdev(sb->s_bdev);
 }
 
 static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
@@ -740,7 +721,6 @@ static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 	if (ret)
 		return ret;
 
-	/* sync the metadata and MDB */
 	return hfs_metadata_fsync(sb);
 }
 
