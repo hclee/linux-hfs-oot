@@ -475,11 +475,21 @@ int hfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 		case HFS_ROOT_CNID:
 			break;
 		case HFS_EXT_CNID:
-			hfs_btree_write(HFS_SB(inode->i_sb)->ext_tree);
+		{
+			struct hfs_btree *ext_tree = HFS_SB(inode->i_sb)->ext_tree;
+			mutex_lock(&ext_tree->tree_lock);
+			hfs_btree_write(ext_tree);
+			mutex_unlock(&ext_tree->tree_lock);
 			return 0;
+		}
 		case HFS_CAT_CNID:
-			hfs_btree_write(HFS_SB(inode->i_sb)->cat_tree);
+		{
+			struct hfs_btree *cat_tree = HFS_SB(inode->i_sb)->cat_tree;
+			mutex_lock(&cat_tree->tree_lock);
+			hfs_btree_write(cat_tree);
+			mutex_unlock(&cat_tree->tree_lock);
 			return 0;
+		}
 		default:
 			BUG();
 			return -EIO;
