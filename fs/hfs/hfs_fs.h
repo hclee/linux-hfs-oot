@@ -187,6 +187,9 @@ extern void hfs_inode_write_fork(struct inode *inode, struct hfs_extent *ext,
 extern int hfs_write_inode(struct inode *inode, struct writeback_control *wbc);
 extern int hfs_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			     struct iattr *attr);
+extern int hfs_dir_fsync(struct file *filp, loff_t start, loff_t end,
+			 int datasync);
+extern int hfs_metadata_fsync(struct super_block *sb);
 extern void hfs_inode_read_fork(struct inode *inode, struct hfs_extent *ext,
 				__be32 __log_size, __be32 phys_size,
 				u32 clump_size);
