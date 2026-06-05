@@ -169,6 +169,22 @@ out:
 	return err;
 }
 
+int hfs_dir_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
+{
+	struct inode *inode = filp->f_mapping->host;
+	struct super_block *sb = inode->i_sb;
+	int ret;
+
+	inode_lock(inode);
+	ret = write_inode_now(inode, 0);
+	inode_unlock(inode);
+
+	if (ret)
+		return ret;
+
+	return hfs_metadata_fsync(sb);
+}
+
 static int hfs_dir_release(struct inode *inode, struct file *file)
 {
 	struct hfs_readdir_data *rd = file->private_data;
@@ -318,6 +334,7 @@ const struct file_operations hfs_dir_operations = {
 	.iterate_shared	= hfs_readdir,
 	.llseek		= generic_file_llseek,
 	.release	= hfs_dir_release,
+	.fsync		= hfs_dir_fsync,
 };
 
 const struct inode_operations hfs_dir_inode_operations = {

@@ -673,12 +673,38 @@ int hfs_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	return 0;
 }
 
+int hfs_metadata_fsync(struct super_block *sb)
+{
+	struct hfs_btree *ext_tree = HFS_SB(sb)->ext_tree;
+	struct hfs_btree *cat_tree = HFS_SB(sb)->cat_tree;
+	int err;
+
+	/* 1. Update B-tree headers in memory & mark dirty */
+	mutex_lock(&ext_tree->tree_lock);
+	hfs_btree_write(ext_tree);
+	mutex_unlock(&ext_tree->tree_lock);
+
+	mutex_lock(&cat_tree->tree_lock);
+	hfs_btree_write(cat_tree);
+	mutex_unlock(&cat_tree->tree_lock);
+
+	/* 2. Sync all B-tree nodes (including the updated headers) to disk */
+	filemap_write_and_wait(ext_tree->inode->i_mapping);
+	filemap_write_and_wait(cat_tree->inode->i_mapping);
+
+	/* 3. Flush MDB and sync block device */
+	flush_delayed_work(&HFS_SB(sb)->mdb_work);
+	/* .. finally sync the buffers to disk */
+	err = sync_blockdev(sb->s_bdev);
+	return err;
+}
+
 static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 			  int datasync)
 {
 	struct inode *inode = filp->f_mapping->host;
-	struct super_block * sb;
-	int ret, err;
+	struct super_block *sb = inode->i_sb;
+	int ret;
 
 	ret = file_write_and_wait_range(filp, start, end);
 	if (ret)
@@ -687,16 +713,13 @@ static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 
 	/* sync the inode to buffers */
 	ret = write_inode_now(inode, 0);
-
-	/* sync the superblock to buffers */
-	sb = inode->i_sb;
-	flush_delayed_work(&HFS_SB(sb)->mdb_work);
-	/* .. finally sync the buffers to disk */
-	err = sync_blockdev(sb->s_bdev);
-	if (!ret)
-		ret = err;
 	inode_unlock(inode);
-	return ret;
+
+	if (ret)
+		return ret;
+
+	/* sync the metadata and MDB */
+	return hfs_metadata_fsync(sb);
 }
 
 static const struct file_operations hfs_file_operations = {
