@@ -9,6 +9,7 @@
  */
 
 #include <linux/pagemap.h>
+#include <linux/blkdev.h>
 
 #include "hfs_fs.h"
 #include "btree.h"
@@ -350,7 +351,7 @@ int hfs_get_block(struct inode *inode, sector_t block,
 		if (block > HFS_I(inode)->fs_blocks)
 			return -EIO;
 		if (ablock >= HFS_I(inode)->alloc_blocks) {
-			res = hfs_extend_file(inode);
+			res = hfs_extend_file(inode, false);
 			if (res)
 				return res;
 		}
@@ -388,7 +389,7 @@ done:
 	return 0;
 }
 
-int hfs_extend_file(struct inode *inode)
+int hfs_extend_file(struct inode *inode, bool zeroout)
 {
 	struct super_block *sb = inode->i_sb;
 	u32 start, len, goal;
@@ -409,6 +410,16 @@ int hfs_extend_file(struct inode *inode)
 	if (!len) {
 		res = -ENOSPC;
 		goto out;
+	}
+
+	if (zeroout) {
+		res = sb_issue_zeroout(sb,
+				      HFS_SB(sb)->fs_start +
+				      (sector_t)start * HFS_SB(sb)->fs_div,
+				      (sector_t)len * HFS_SB(sb)->fs_div,
+				      GFP_NOFS);
+		if (res)
+			goto out;
 	}
 
 	hfs_dbg("ino %llu, start %u, len %u\n", inode->i_ino, start, len);
