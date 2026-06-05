@@ -167,7 +167,7 @@ extern u16 hfs_ext_find_block(struct hfs_extent *ext, u16 off);
 extern int hfs_free_fork(struct super_block *sb,
 			 struct hfs_cat_file *file, int type);
 extern int hfs_ext_write_extent(struct inode *inode);
-extern int hfs_extend_file(struct inode *inode);
+extern int hfs_extend_file(struct inode *inode, bool zeroout);
 extern void hfs_file_truncate(struct inode *inode);
 
 extern int hfs_get_block(struct inode *inode, sector_t block,
