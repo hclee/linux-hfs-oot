@@ -365,9 +365,14 @@ void hfs_mdb_commit(struct super_block *sb)
 
 void hfs_mdb_close(struct super_block *sb)
 {
+	struct buffer_head *bh = HFS_SB(sb)->mdb_bh;
 	/* update volume attributes */
 	if (sb_rdonly(sb))
 		return;
+
+	if (buffer_write_io_error(bh) || !buffer_uptodate(bh))
+		return;
+
 	HFS_SB(sb)->mdb->drAtrb |= cpu_to_be16(HFS_SB_ATTRIB_UNMNT);
 	HFS_SB(sb)->mdb->drAtrb &= cpu_to_be16(~HFS_SB_ATTRIB_INCNSTNT);
 	mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
