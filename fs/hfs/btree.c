@@ -266,7 +266,7 @@ int hfs_bmap_reserve(struct hfs_btree *tree, u32 rsvd_nodes)
 	int res;
 
 	while (tree->free_nodes < rsvd_nodes) {
-		res = hfs_extend_file(inode);
+		res = hfs_extend_file(inode, true);
 		if (res)
 			return res;
 		HFS_I(inode)->phys_size = inode->i_size =
