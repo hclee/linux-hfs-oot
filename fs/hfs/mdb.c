@@ -290,6 +290,7 @@ int hfs_mdb_get(struct super_block *sb)
 void hfs_mdb_commit(struct super_block *sb)
 {
 	struct hfs_mdb *mdb = HFS_SB(sb)->mdb;
+	bool bitmap_dirty;
 
 	if (sb_rdonly(sb))
 		return;
@@ -332,12 +333,16 @@ void hfs_mdb_commit(struct super_block *sb)
 		sync_dirty_buffer(HFS_SB(sb)->alt_mdb_bh);
 	}
 
-	if (test_and_clear_bit(HFS_FLG_BITMAP_DIRTY, &HFS_SB(sb)->flags)) {
+	bitmap_dirty = test_and_clear_bit(HFS_FLG_BITMAP_DIRTY, &HFS_SB(sb)->flags);
+	unlock_buffer(HFS_SB(sb)->mdb_bh);
+
+	if (bitmap_dirty) {
 		struct buffer_head *bh;
 		sector_t block;
 		char *ptr;
 		int off, size, len;
 
+		mutex_lock(&HFS_SB(sb)->bitmap_lock);
 		block = be16_to_cpu(HFS_SB(sb)->mdb->drVBMSt) + HFS_SB(sb)->part_start;
 		off = (block << HFS_SECTOR_SIZE_BITS) & (sb->s_blocksize - 1);
 		block >>= sb->s_blocksize_bits - HFS_SECTOR_SIZE_BITS;
@@ -362,8 +367,8 @@ void hfs_mdb_commit(struct super_block *sb)
 			ptr += len;
 			size -= len;
 		}
+		mutex_unlock(&HFS_SB(sb)->bitmap_lock);
 	}
-	unlock_buffer(HFS_SB(sb)->mdb_bh);
 }
 
 void hfs_mdb_close(struct super_block *sb)
