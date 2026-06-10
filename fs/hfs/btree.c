@@ -258,6 +258,46 @@ static struct hfs_bnode *hfs_bmap_new_bmap(struct hfs_bnode *prev, u32 idx)
 	return node;
 }
 
+static int hfs_bmap_ensure_coverage(struct hfs_btree *tree)
+{
+	struct hfs_bnode *node, *next_node;
+	u32 covered_bits = 0;
+	u16 off16;
+	u16 len;
+
+	node = hfs_bnode_find(tree, 0);
+	if (IS_ERR(node))
+		return PTR_ERR(node);
+
+	len = hfs_brec_lenoff(node, 2, &off16);
+	covered_bits += len * 8;
+
+	while (covered_bits < tree->node_count) {
+		if (!node->next) {
+			next_node = hfs_bmap_new_bmap(node, covered_bits);
+			if (IS_ERR(next_node)) {
+				hfs_bnode_put(node);
+				return PTR_ERR(next_node);
+			}
+			hfs_btree_write(tree);
+		} else {
+			next_node = hfs_bnode_find(tree, node->next);
+			if (IS_ERR(next_node)) {
+				hfs_bnode_put(node);
+				return PTR_ERR(next_node);
+			}
+		}
+
+		hfs_bnode_put(node);
+		node = next_node;
+		len = hfs_brec_lenoff(node, 0, &off16);
+		covered_bits += len * 8;
+	}
+
+	hfs_bnode_put(node);
+	return 0;
+}
+
 /* Make sure @tree has enough space for the @rsvd_nodes */
 int hfs_bmap_reserve(struct hfs_btree *tree, u32 rsvd_nodes)
 {
@@ -278,6 +318,9 @@ int hfs_bmap_reserve(struct hfs_btree *tree, u32 rsvd_nodes)
 		count = inode->i_size >> tree->node_size_shift;
 		tree->free_nodes += count - tree->node_count;
 		tree->node_count = count;
+		res = hfs_bmap_ensure_coverage(tree);
+		if (res)
+			return res;
 	}
 	return 0;
 }
@@ -321,6 +364,7 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 						set_page_dirty(*pagep);
 						kunmap_local(data);
 						tree->free_nodes--;
+						hfs_btree_write(tree);
 						mark_inode_dirty(tree->inode);
 						hfs_bnode_put(node);
 						return hfs_bnode_create(tree, idx);
@@ -340,6 +384,8 @@ struct hfs_bnode *hfs_bmap_alloc(struct hfs_btree *tree)
 		if (!nidx) {
 			printk(KERN_DEBUG "create new bmap node...\n");
 			next_node = hfs_bmap_new_bmap(node, idx);
+			if (!IS_ERR(next_node))
+				hfs_btree_write(tree);
 		} else
 			next_node = hfs_bnode_find(tree, nidx);
 		hfs_bnode_put(node);
@@ -414,5 +460,6 @@ void hfs_bmap_free(struct hfs_bnode *node)
 	kunmap_local(data);
 	hfs_bnode_put(node);
 	tree->free_nodes++;
+	hfs_btree_write(tree);
 	mark_inode_dirty(tree->inode);
 }
