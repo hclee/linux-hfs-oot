@@ -683,6 +683,13 @@ int hfs_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		if (error)
 			return error;
 
+		if (attr->ia_size < inode->i_size) {
+			error = block_truncate_page(inode->i_mapping,
+						    attr->ia_size,
+						    hfs_get_block);
+			if (error)
+				return error;
+		}
 		truncate_setsize(inode, attr->ia_size);
 		hfs_file_truncate(inode);
 		simple_inode_init_ts(inode);
