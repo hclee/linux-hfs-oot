@@ -154,6 +154,7 @@ struct hfsplus_sb_info {
 
 	int part, session;
 	unsigned long flags;
+	u8 unicode_version;
 
 	int work_queued;               /* non-zero delayed work is queued */
 	struct delayed_work sync_work; /* FS sync delayed work */
@@ -169,6 +170,9 @@ struct hfsplus_sb_info {
 #define HFSPLUS_SB_NOBARRIER	5
 #define HFSPLUS_SB_UID		6
 #define HFSPLUS_SB_GID		7
+
+#define HFSPLUS_UNICODE_VERSION_2_1	1
+#define HFSPLUS_UNICODE_VERSION_3_2	2
 
 static inline struct hfsplus_sb_info *HFSPLUS_SB(struct super_block *sb)
 {
