@@ -26,7 +26,7 @@ enum {
 	opt_umask, opt_uid, opt_gid,
 	opt_part, opt_session, opt_nls,
 	opt_decompose, opt_barrier,
-	opt_force,
+	opt_force, opt_unicode,
 };
 
 static const struct fs_parameter_spec hfs_param_spec[] = {
@@ -41,6 +41,7 @@ static const struct fs_parameter_spec hfs_param_spec[] = {
 	fsparam_flag_no	("decompose",	opt_decompose),
 	fsparam_flag_no	("barrier",	opt_barrier),
 	fsparam_flag	("force",	opt_force),
+	fsparam_string("unicode", opt_unicode),
 	{}
 };
 
@@ -57,6 +58,7 @@ void hfsplus_fill_defaults(struct hfsplus_sb_info *opts)
 	opts->gid = current_gid();
 	opts->part = -1;
 	opts->session = -1;
+	opts->unicode_version = HFSPLUS_UNICODE_VERSION_2_1;
 }
 
 /* Parse options from mount. Returns nonzero errno on failure */
@@ -137,6 +139,16 @@ int hfsplus_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case opt_force:
 		set_bit(HFSPLUS_SB_FORCE, &sbi->flags);
 		break;
+	case opt_unicode:
+		if (!strcmp(param->string, "2.1")) {
+			sbi->unicode_version = HFSPLUS_UNICODE_VERSION_2_1;
+		} else if (!strcmp(param->string, "3.2")) {
+			sbi->unicode_version = HFSPLUS_UNICODE_VERSION_3_2;
+		} else {
+			pr_err("unicode option requires a value of \"2.1\" or \"3.2\"\n");
+			return -EINVAL;
+		}
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -165,5 +177,7 @@ int hfsplus_show_options(struct seq_file *seq, struct dentry *root)
 		seq_puts(seq, ",nodecompose");
 	if (test_bit(HFSPLUS_SB_NOBARRIER, &sbi->flags))
 		seq_puts(seq, ",nobarrier");
+	if (sbi->unicode_version == HFSPLUS_UNICODE_VERSION_3_2)
+		seq_puts(seq, ",unicode=3.2");
 	return 0;
 }
