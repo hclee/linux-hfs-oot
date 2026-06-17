@@ -1,0 +1,38 @@
+name: HFS/HFS+ OOT CI
+
+on:
+  push:
+    branches: [ main, master, for-hfs-next-rebase ]
+  pull_request:
+    branches: [ main, master, for-hfs-next-rebase ]
+
+jobs:
+  build-v7-1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libelf-dev libssl-dev bc bison flex
+
+      - name: Cache Kernel Source
+        id: cache-kernel
+        uses: actions/cache@v4
+        with:
+          path: ~/kernel-v7.1
+          key: kernel-v7.1-headers
+
+      - name: Fetch and Setup Linux v7.1 Source Headers
+        if: steps.cache-kernel.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/kernel-v7.1
+          curl -L https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/snapshot/linux-7.1.tar.gz | tar -xz -C ~/kernel-v7.1 --strip-components=1
+          cd ~/kernel-v7.1
+          make defconfig
+          make modules_prepare
+
+      - name: Compile OOT Modules against v7.1
+        run: |
+          make KDIR=~/kernel-v7.1
