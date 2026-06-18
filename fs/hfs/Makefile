@@ -11,3 +11,6 @@ hfs-objs := bitmap.o bfind.o bnode.o brec.o btree.o \
 
 # KUnit tests
 obj-$(CONFIG_HFS_KUNIT_TEST) += string_test.o
+
+CFLAGS_dir.o += -DCOMPAT_COMPILING_HFS_DIR
+CFLAGS_sysdep.o += -DCOMPAT_COMPILING_HFS_SYSDEP

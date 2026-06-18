@@ -11,3 +11,5 @@ hfsplus-objs := super.o options.o inode.o ioctl.o extents.o catalog.o dir.o btre
 
 # KUnit tests
 obj-$(CONFIG_HFSPLUS_KUNIT_TEST) += unicode_test.o
+
+CFLAGS_dir.o += -DCOMPAT_COMPILING_HFSPLUS_DIR
