@@ -256,7 +256,8 @@ int hfs_mdb_get(struct super_block *sb)
 		be32_add_cpu(&mdb->drWrCnt, 1);
 		mdb->drLsMod = hfs_mtime();
 
-		mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
+		if (buffer_mapped(HFS_SB(sb)->mdb_bh))
+			mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
 		sync_dirty_buffer(HFS_SB(sb)->mdb_bh);
 	}
 
@@ -310,7 +311,8 @@ void hfs_mdb_commit(struct super_block *sb)
 			cpu_to_be32((u32)atomic64_read(&HFS_SB(sb)->folder_count));
 
 		/* write MDB to disk */
-		mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
+		if (buffer_mapped(HFS_SB(sb)->mdb_bh))
+			mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
 	}
 
 	/* write the backup MDB, not returning until it is written.
@@ -329,7 +331,8 @@ void hfs_mdb_commit(struct super_block *sb)
 		HFS_SB(sb)->alt_mdb->drAtrb &= cpu_to_be16(~HFS_SB_ATTRIB_INCNSTNT);
 		unlock_buffer(HFS_SB(sb)->alt_mdb_bh);
 
-		mark_buffer_dirty(HFS_SB(sb)->alt_mdb_bh);
+		if (buffer_mapped(HFS_SB(sb)->alt_mdb_bh))
+			mark_buffer_dirty(HFS_SB(sb)->alt_mdb_bh);
 		sync_dirty_buffer(HFS_SB(sb)->alt_mdb_bh);
 	}
 
@@ -360,7 +363,8 @@ void hfs_mdb_commit(struct super_block *sb)
 			memcpy(bh->b_data + off, ptr, len);
 			unlock_buffer(bh);
 
-			mark_buffer_dirty(bh);
+			if (buffer_mapped(bh))
+				mark_buffer_dirty(bh);
 			brelse(bh);
 			block++;
 			off = 0;
@@ -383,7 +387,8 @@ void hfs_mdb_close(struct super_block *sb)
 
 	HFS_SB(sb)->mdb->drAtrb |= cpu_to_be16(HFS_SB_ATTRIB_UNMNT);
 	HFS_SB(sb)->mdb->drAtrb &= cpu_to_be16(~HFS_SB_ATTRIB_INCNSTNT);
-	mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
+	if (buffer_mapped(HFS_SB(sb)->mdb_bh))
+		mark_buffer_dirty(HFS_SB(sb)->mdb_bh);
 }
 
 /*

@@ -571,11 +571,14 @@ void hfs_bnode_put(struct hfs_bnode *node)
 			mark_page_accessed(node->page[i]);
 		}
 
-		if (test_bit(HFS_BNODE_DELETED, &node->flags)) {
+		if (test_bit(HFS_BNODE_DELETED, &node->flags) ||
+		    test_bit(HFS_BNODE_ERROR, &node->flags)) {
 			hfs_bnode_unhash(node);
 			spin_unlock(&tree->hash_lock);
-			hfs_bnode_clear(node, 0, tree->node_size);
-			hfs_bmap_free(node);
+			if (test_bit(HFS_BNODE_DELETED, &node->flags)) {
+				hfs_bnode_clear(node, 0, tree->node_size);
+				hfs_bmap_free(node);
+			}
 			hfs_bnode_free(node);
 			return;
 		}
