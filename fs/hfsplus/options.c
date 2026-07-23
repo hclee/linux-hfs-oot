@@ -152,6 +152,7 @@ int hfsplus_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		break;
 	case opt_metadata_sync:
 		set_bit(HFSPLUS_SB_METADATA_SYNC, &sbi->flags);
+		fc->sb_flags |= SB_SYNCHRONOUS;
 		break;
 	default:
 		return -EINVAL;
