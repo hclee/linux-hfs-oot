@@ -170,6 +170,7 @@ struct hfsplus_sb_info {
 #define HFSPLUS_SB_NOBARRIER	5
 #define HFSPLUS_SB_UID		6
 #define HFSPLUS_SB_GID		7
+#define HFSPLUS_SB_METADATA_SYNC	8
 
 #define HFSPLUS_UNICODE_VERSION_2_1	1
 #define HFSPLUS_UNICODE_VERSION_3_2	2

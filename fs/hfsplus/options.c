@@ -26,7 +26,7 @@ enum {
 	opt_umask, opt_uid, opt_gid,
 	opt_part, opt_session, opt_nls,
 	opt_decompose, opt_barrier,
-	opt_force, opt_unicode,
+	opt_force, opt_unicode, opt_metadata_sync,
 };
 
 static const struct fs_parameter_spec hfs_param_spec[] = {
@@ -42,6 +42,7 @@ static const struct fs_parameter_spec hfs_param_spec[] = {
 	fsparam_flag_no	("barrier",	opt_barrier),
 	fsparam_flag	("force",	opt_force),
 	fsparam_string("unicode", opt_unicode),
+	fsparam_flag("metadata_sync",	opt_metadata_sync),
 	{}
 };
 
@@ -149,6 +150,9 @@ int hfsplus_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			return -EINVAL;
 		}
 		break;
+	case opt_metadata_sync:
+		set_bit(HFSPLUS_SB_METADATA_SYNC, &sbi->flags);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -179,5 +183,7 @@ int hfsplus_show_options(struct seq_file *seq, struct dentry *root)
 		seq_puts(seq, ",nobarrier");
 	if (sbi->unicode_version == HFSPLUS_UNICODE_VERSION_3_2)
 		seq_puts(seq, ",unicode=3.2");
+	if (test_bit(HFSPLUS_SB_METADATA_SYNC, &sbi->flags))
+		seq_puts(seq, ",metadata_sync");
 	return 0;
 }
