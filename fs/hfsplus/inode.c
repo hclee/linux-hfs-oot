@@ -409,10 +409,15 @@ int hfsplus_file_fsync(struct file *file, loff_t start, loff_t end,
 	if (!error)
 		error = error2;
 
-	if (!test_bit(HFSPLUS_SB_NOBARRIER, &sbi->flags))
-		blkdev_issue_flush(inode->i_sb->s_bdev);
+	if (!test_bit(HFSPLUS_SB_NOBARRIER, &sbi->flags)) {
+		error2 = blkdev_issue_flush(inode->i_sb->s_bdev);
+		if (!error)
+			error = error2;
+	}
 
 	inode_unlock(inode);
+
+	hfsplus_handle_write_error(sb, error);
 
 	return error;
 }

@@ -243,6 +243,15 @@ out:
 	return error;
 }
 
+void hfsplus_handle_write_error(struct super_block *sb, int error)
+{
+	if (!error || sb_rdonly(sb))
+		return;
+
+	pr_err("metadata write failed (%d), remounting read-only\n", error);
+	sb->s_flags |= SB_RDONLY;
+}
+
 static int hfsplus_sync_fs(struct super_block *sb, int wait)
 {
 	struct hfsplus_sb_info *sbi = HFSPLUS_SB(sb);
@@ -279,8 +288,13 @@ static int hfsplus_sync_fs(struct super_block *sb, int wait)
 	if (!error)
 		error = error2;
 
-	if (!test_bit(HFSPLUS_SB_NOBARRIER, &sbi->flags))
-		blkdev_issue_flush(sb->s_bdev);
+	if (!test_bit(HFSPLUS_SB_NOBARRIER, &sbi->flags)) {
+		error2 = blkdev_issue_flush(sb->s_bdev);
+		if (!error)
+			error = error2;
+	}
+
+	hfsplus_handle_write_error(sb, error);
 
 	hfs_dbg("finished: err %d\n", error);
 
@@ -313,7 +327,10 @@ void hfsplus_mark_mdb_dirty(struct super_block *sb)
 
 	spin_lock(&sbi->work_lock);
 	if (!sbi->work_queued) {
-		delay = msecs_to_jiffies(dirty_writeback_interval * 10);
+		if (test_bit(HFSPLUS_SB_METADATA_SYNC, &sbi->flags))
+			delay = 0;
+		else
+			delay = msecs_to_jiffies(dirty_writeback_interval * 10);
 		queue_delayed_work(system_long_wq, &sbi->sync_work, delay);
 		sbi->work_queued = 1;
 	}
